@@ -7,87 +7,100 @@ class DecodedInstruction:
     """
     This class represents the 'contract' between the Decoder and the Executor.
     It holds a decoded instruction in a structured format.
-    All fields are initialized to None and filled during decoding.
     """
-    def __init__(self, machine_code):
-        self.machine_code = machine_code  # The raw 32-bit machine code word
-        self.op_type = None      # E.g., 'DP_IMM', 'LOAD_STORE', 'BRANCH'
-        self.op_code = None      # E.g., 'ADD', 'SUB', 'LDR', 'B'
-        self.rn = None           # First source register
-        self.rd = None           # Destination register
-        self.imm = None          # Immediate value
-        self.is_thumb = False    # Flag for Thumb instructions
+    def __init__(self, machine_code, is_thumb=False):
+        self.machine_code = machine_code
+        self.is_thumb = is_thumb
+        self.op_type = 'UNKNOWN'
+        self.op_code = 'UNK'
+        self.cond = (machine_code >> 28) if not is_thumb else 0b1110 # Condition field for ARM
+        self.rn = None
+        self.rd = None
+        self.rm = None
+        self.imm = None
 
     def __str__(self):
-        # Helper function to print the decoded instruction details
-        return (f"Machine Code: {hex(self.machine_code)}\n"
-                f"  Op Type: {self.op_type}\n"
-                f"  Op Code: {self.op_code}\n"
-                f"  Rd: {self.rd}, Rn: {self.rn}, Imm: {self.imm}")
+        return (f"Code: {hex(self.machine_code)} {'(Thumb)' if self.is_thumb else '(ARM)'}\n"
+                f"  Op: {self.op_code}, Type: {self.op_type}\n"
+                f"  Regs: Rd={self.rd}, Rn={self.rn}, Rm={self.rm}\n"
+                f"  Imm: {self.imm}")
 
+def decode_arm(machine_code):
+    """Decodes a 32-bit ARM instruction."""
+    inst = DecodedInstruction(machine_code, is_thumb=False)
 
-def decode_instruction(machine_code):
-    """
-    Decodes a single 32-bit ARMv7 machine code word. 
-    This function acts as the core of the disassembler/simulator. 
+    # --- Data Processing (Immediate) ---
+    if (machine_code >> 25) & 0b111 == 0b001:
+        inst.op_type, inst.rn, inst.rd, inst.imm = 'DP_IMM', (machine_code >> 16) & 0xF, (machine_code >> 12) & 0xF, machine_code & 0xFFF
+        opcode = (machine_code >> 21) & 0xF
+        op_map = {0b0100: 'ADD', 0b0010: 'SUB', 0b1101: 'MOV', 0b0000: 'AND', 0b1100: 'ORR', 0b1011: 'CMN', 0b1001: 'TST', 0b1010: 'CMP'}
+        if opcode in op_map: inst.op_code = op_map[opcode]
+        return inst
     
-    Args:
-        machine_code (int): A 32-bit integer representing one ARM instruction.
-
-    Returns:
-        DecodedInstruction: A structured object representing the instruction.
-    """
-    inst = DecodedInstruction(machine_code)
-
-    # --- Example 1: Decode an ADD instruction (Data Processing with immediate) ---
-    # Condition: 1110 (bits 31-28), OpType: 001 (bits 27-25), Opcode: 0100 (ADD, bits 24-21)
-    if (machine_code >> 21) & 0b11111111111 == 0b11100010100:
-        inst.op_type = 'DP_IMM'
-        inst.op_code = 'ADD'
-        inst.rn = (machine_code >> 16) & 0xF  # Extract Rn (bits 19-16)
-        inst.rd = (machine_code >> 12) & 0xF  # Extract Rd (bits 15-12)
-        inst.imm = machine_code & 0xFF        # Extract Imm (bits 7-0)
+    # --- Data Processing (Register) ---
+    elif (machine_code >> 25) & 0b111 == 0b000:
+        inst.op_type, inst.rn, inst.rd, inst.rm = 'DP_REG', (machine_code >> 16) & 0xF, (machine_code >> 12) & 0xF, machine_code & 0xF
+        opcode = (machine_code >> 21) & 0xF
+        if opcode == 0b0100: inst.op_code = 'ADD'
+        # ... add other register-based DP instructions ...
         return inst
 
-    # --- Example 2: Decode an LDR instruction (Load/Store with immediate offset) ---
-    # Condition: 1110 (bits 31-28), OpType: 010 (bits 27-25), Load bit: 1 (bit 20)
-    if (machine_code >> 25) & 0b111 == 0b010 and (machine_code >> 20) & 0b1 == 1:
-        inst.op_type = 'LOAD_STORE'
-        inst.op_code = 'LDR'
-        inst.rn = (machine_code >> 16) & 0xF  # Base register
-        inst.rd = (machine_code >> 12) & 0xF  # Destination register
-        inst.imm = machine_code & 0xFFF       # 12-bit immediate offset
+    # --- Load/Store (Immediate) ---
+    elif (machine_code >> 25) & 0b110 == 0b010:
+        inst.op_type, inst.rn, inst.rd, inst.imm = 'LOAD_STORE', (machine_code >> 16) & 0xF, (machine_code >> 12) & 0xF, machine_code & 0xFFF
+        inst.op_code = 'LDR' if (machine_code >> 20) & 1 else 'STR'
+        return inst
+
+    # --- Branch ---
+    elif (machine_code >> 25) & 0b111 == 0b101:
+        inst.op_type, inst.imm = 'BRANCH', machine_code & 0x00FFFFFF
+        if (inst.imm >> 23) & 1: inst.imm |= 0xFF000000 # Sign extend
+        inst.op_code = 'BL' if (machine_code >> 24) & 1 else 'B'
         return inst
         
-    # Add logic for the other 13+ instructions here...
+    return inst
 
-    return inst # Return partially decoded or unknown instruction if no match
+def decode_thumb(machine_code):
+    """Decodes a 16-bit Thumb instruction."""
+    inst = DecodedInstruction(machine_code, is_thumb=True)
 
+    # --- ADD/SUB register (format 3) ---
+    if (machine_code >> 11) == 0b00011:
+        inst.op_type = 'DP_REG'
+        inst.rn, inst.rd = (machine_code >> 3) & 0x7, machine_code & 0x7
+        inst.op_code = 'SUB' if (machine_code >> 9) & 1 else 'ADD'
+        return inst
 
-def read_binary_file(filename):
+    # --- MOV/CMP/ADD/SUB immediate (format 4) ---
+    elif (machine_code >> 13) == 0b001:
+        inst.op_type, inst.rd, inst.imm = 'DP_IMM', (machine_code >> 8) & 0x7, machine_code & 0xFF
+        opcode = (machine_code >> 11) & 0x3
+        op_map = {0b00: 'MOV', 0b01: 'CMP', 0b10: 'ADD', 0b11: 'SUB'}
+        if opcode in op_map: inst.op_code = op_map[opcode]
+        return inst
+
+    return inst
+
+def read_and_decode(filename, cpu_is_thumb=False):
     """
-    Reads a binary file containing ARM machine code and yields decoded instructions. 
-    The first instruction is assumed to be at location 0x00 in the main memory. [cite: 11]
-
-    Args:
-        filename (str): The path to the binary file.
-
-    Yields:
-        DecodedInstruction: The next decoded instruction from the file.
+    Reads a binary file and yields decoded instructions, handling ARM/Thumb state.
+    This fulfills the requirement to 'Read ARM/Thumb machine code file'. [cite: 9]
     """
     try:
         with open(filename, 'rb') as f:
             while True:
-                # Read 4 bytes (32-bit word) for the next ARM instruction [cite: 10]
-                word = f.read(4)
-                if not word:
-                    break # End of file
-                
-                # Convert the 4 bytes to a 32-bit integer
-                machine_code = int.from_bytes(word, 'little')
-                
-                # Decode the machine code word into an instruction 
-                yield decode_instruction(machine_code)
-
+                if cpu_is_thumb:
+                    # In Thumb state, read 2 bytes (16-bit word)
+                    word = f.read(2)
+                    if not word: break
+                    machine_code = int.from_bytes(word, 'little')
+                    yield decode_thumb(machine_code)
+                else:
+                    # In ARM state, read 4 bytes (32-bit word)
+                    word = f.read(4)
+                    if not word: break
+                    machine_code = int.from_bytes(word, 'little')
+                    yield decode_arm(machine_code)
+                # NOTE: A real implementation needs the BX instruction to modify the cpu_is_thumb flag
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
