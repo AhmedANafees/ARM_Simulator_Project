@@ -37,12 +37,19 @@ def decode_arm(machine_code):
         if opcode in op_map: inst.op_code = op_map[opcode]
         return inst
     
-    # --- Data Processing (Register) ---
+    # --- Data Processing (Register) --- [NEWLY EXPANDED]
     elif (machine_code >> 25) & 0b111 == 0b000:
         inst.op_type, inst.rn, inst.rd, inst.rm = 'DP_REG', (machine_code >> 16) & 0xF, (machine_code >> 12) & 0xF, machine_code & 0xF
         opcode = (machine_code >> 21) & 0xF
-        if opcode == 0b0100: inst.op_code = 'ADD'
-        # ... add other register-based DP instructions ...
+        # Comprehensive map for all standard register-based data processing operations
+        op_map = {
+            0b0000: 'AND', 0b0001: 'EOR', 0b0010: 'SUB', 0b0011: 'RSB',
+            0b0100: 'ADD', 0b0101: 'ADC', 0b0110: 'SBC', 0b0111: 'RSC',
+            0b1000: 'TST', 0b1001: 'TEQ', 0b1010: 'CMP', 0b1011: 'CMN',
+            0b1100: 'ORR', 0b1101: 'MOV', 0b1110: 'BIC', 0b1111: 'MVN'
+        }
+        if opcode in op_map:
+            inst.op_code = op_map[opcode]
         return inst
 
     # --- Load/Store (Immediate) ---
@@ -84,23 +91,20 @@ def decode_thumb(machine_code):
 def read_and_decode(filename, cpu_is_thumb=False):
     """
     Reads a binary file and yields decoded instructions, handling ARM/Thumb state.
-    This fulfills the requirement to 'Read ARM/Thumb machine code file'. [cite: 9]
     """
     try:
         with open(filename, 'rb') as f:
             while True:
                 if cpu_is_thumb:
-                    # In Thumb state, read 2 bytes (16-bit word)
                     word = f.read(2)
                     if not word: break
                     machine_code = int.from_bytes(word, 'little')
                     yield decode_thumb(machine_code)
                 else:
-                    # In ARM state, read 4 bytes (32-bit word)
                     word = f.read(4)
                     if not word: break
                     machine_code = int.from_bytes(word, 'little')
                     yield decode_arm(machine_code)
-                # NOTE: A real implementation needs the BX instruction to modify the cpu_is_thumb flag
     except FileNotFoundError:
         print(f"Error: File '{filename}' not found.")
+
