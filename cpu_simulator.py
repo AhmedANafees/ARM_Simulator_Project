@@ -67,8 +67,6 @@ class CPU:
                 print(f"Mem[0x{mem_addr:X}] changed: {val_before} -> {val_after}")
 
     def _set_nz_flags(self, result):
-        self.flags['C'] = 1 if result > 0xFFFFFFFF else 0
-        self.flags['V'] = 1 if ((op1 >> 31) == (op2 >> 31)) and ((op1 >> 31) != ((result & 0xFFFFFFFF) >> 31)) else 0
         # Negative flag: bit31
         self.flags['N'] = (result >> 31) & 1
         # Zero flag
