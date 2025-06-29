@@ -17,6 +17,9 @@ def main():
         # execute it on the CPU state
         cpu.execute(inst)
         print('-----')
+        if cpu.pc == pc_before_exec:
+            cpu.pc += 4
+        print('-----')
 
 if __name__ == "__main__":
     main()
