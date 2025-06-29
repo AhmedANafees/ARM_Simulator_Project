@@ -67,6 +67,8 @@ class CPU:
                 print(f"Mem[0x{mem_addr:X}] changed: {val_before} -> {val_after}")
 
     def _set_nz_flags(self, result):
+        self.flags['C'] = 1 if result > 0xFFFFFFFF else 0
+        self.flags['V'] = 1 if ((op1 >> 31) == (op2 >> 31)) and ((op1 >> 31) != ((result & 0xFFFFFFFF) >> 31)) else 0
         # Negative flag: bit31
         self.flags['N'] = (result >> 31) & 1
         # Zero flag
@@ -244,13 +246,13 @@ class CPU:
         """
         BL: Branch with link. LR = PC + 4; PC += imm<<2
         """
+        next_pc = self.pc + 8          # pipeline: PC points two instructions ahead
         # sign-extend 24-bit imm to Python int
         imm24 = inst.imm & 0x00FFFFFF
         if imm24 & (1 << 23):
             imm24 -= (1 << 24)
         offset = imm24 << 2
-        next_pc = self.pc + 8          # pipeline: PC points two instructions ahead
-        self.regs[14] = next_pc + 4    # LR = address of instruction after BL (PC+4)
+        self.regs[14] = self.pc + 4    # LR = address of instruction after BL (PC+4)
         self.pc = next_pc + offset
 
 # -----------------------
