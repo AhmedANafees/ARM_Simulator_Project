@@ -1,6 +1,6 @@
 # system_simulator.py
 
-from decoder import decode_instruction
+from decoder import decode_arm
 from cpu_simulator import CPU
 
 class SystemSimulator:
@@ -28,7 +28,7 @@ class SystemSimulator:
                 print(f"No instruction at address 0x{self.PC:08X}, halting.")
                 break
 
-            decoded = decode_instruction(instruction_word)
+            decoded = decode_arm(instruction_word)
             print(f"0x{self.PC:08X}: Executing {decoded.opcode}")
 
             self.cpu.execute(decoded)
