@@ -50,6 +50,15 @@ class CPU:
         # Execute the instruction
         handler(inst)
 
+        # Unless the handler explicitly updated PC (e.g. for branches),
+        # advance PC to the next instruction based on the current
+        # execution mode. This keeps sequential execution moving
+        # forward like real hardware.
+        if self.regs[15] == before_regs[15]:
+            step = 2 if self.cpu_is_thumb else 4
+            self.pc = (self.pc + step) & 0xFFFFFFFF
+
+
         # Report changes
         self._report_changes(before_regs, before_mem, mem_addr)
 
@@ -250,7 +259,7 @@ class CPU:
             imm24 -= (1 << 24)
         offset = imm24 << 2
         next_pc = self.pc + 8          # pipeline: PC points two instructions ahead
-        self.regs[14] = next_pc + 4    # LR = address of instruction after BL (PC+4)
+        self.regs[14] = self.pc + 4    # LR should hold address of instruction after BL
         self.pc = next_pc + offset
 
 # -----------------------
@@ -319,7 +328,27 @@ class TestCPUExecutor(unittest.TestCase):
         inst.op_code, inst.op_type, inst.imm = 'B', 'BRANCH', 2
         self.cpu.regs[15] = 0
         self.cpu.execute(inst)
+       # PC is treated as pointing to the current instruction address, so the
+        # branch target uses PC+8 plus the shifted offset
+        self.assertEqual(self.cpu.regs[15], 16)
+
+    def test_branch_link(self):
+        # BL with immediate 0 should branch to PC+8 and set LR=PC+4
+        inst = DecodedInstruction(0)
+        inst.op_code, inst.op_type, inst.imm = 'BL', 'BRANCH', 0
+        self.cpu.regs[15] = 0
+        self.cpu.execute(inst)
         self.assertEqual(self.cpu.regs[15], 8)
+        self.assertEqual(self.cpu.regs[14], 4)
+
+    def test_bl_negative_offset(self):
+        # BL -1 should branch backwards and set link register correctly
+        inst = DecodedInstruction(0)
+        inst.op_code, inst.op_type, inst.imm = 'BL', 'BRANCH', 0xFFFFFF
+        self.cpu.pc = 0
+        self.cpu.execute(inst)
+        self.assertEqual(self.cpu.pc, 4)
+        self.assertEqual(self.cpu.regs[14], 4)
 
 # Run tests if executed as script
 if __name__ == '__main__':
