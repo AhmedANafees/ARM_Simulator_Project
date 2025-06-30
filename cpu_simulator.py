@@ -6,14 +6,7 @@ Implements CPU state, execution logic, and unit tests.
 from decoder import DecodedInstruction, decode_arm, decode_thumb, read_and_decode
 
 class CPU:
-    """
-    CPU state and executor for ARM/Thumb instructions.
-    - regs: list of 16 general-purpose registers (R0-R15), R15 is PC.
-    - flags: dictionary of condition flags (N, Z, C, V).
-    - memory: bytearray for byte-addressable memory.
-    """
     def __init__(self, memory_size=1024):
-        # Initialize registers and memory
         self.regs = [0] * 16
         self.flags = {'N': 0, 'Z': 0, 'C': 0, 'V': 0}
         self.memory = bytearray(memory_size)
@@ -29,17 +22,13 @@ class CPU:
         self.regs[15] = value
 
     def execute(self, inst: DecodedInstruction):
-        """
-        Dispatch decoded instruction to the appropriate handler.
-        Prints any register or memory changes.
-        """
         handler_name = f"exec_{inst.op_code.lower()}"
         handler = getattr(self, handler_name, None)
         if handler is None:
             print(f"[WARN] No handler for opcode '{inst.op_code}'")
             return
 
-        # Snapshot state before execution for reporting
+        #snapshot
         before_regs = self.regs.copy()
         before_mem = None
         mem_addr = None
@@ -47,27 +36,23 @@ class CPU:
             mem_addr = self.regs[inst.rn] + inst.imm
             before_mem = self.memory[mem_addr:mem_addr+4]
 
-        # Execute the instruction
+        #execute
         handler(inst)
 
-        # Unless the handler explicitly updated PC (e.g. for branches),
-        # advance PC to the next instruction based on the current
-        # execution mode. This keeps sequential execution moving
-        # forward like real hardware.
+        #PC update
         if self.regs[15] == before_regs[15]:
             step = 2 if self.cpu_is_thumb else 4
             self.pc = (self.pc + step) & 0xFFFFFFFF
 
-
-        # Report changes
+        
         self._report_changes(before_regs, before_mem, mem_addr)
 
     def _report_changes(self, before_regs, before_mem, mem_addr):
-        # Check register changes
+        
         for idx, (old, new) in enumerate(zip(before_regs, self.regs)):
             if old != new:
                 print(f"R{idx} changed: {old} -> {new}")
-        # Check memory changes for loads/stores
+        
         if before_mem is not None and mem_addr is not None:
             after_mem = self.memory[mem_addr:mem_addr+4]
             if after_mem != before_mem:
@@ -76,16 +61,16 @@ class CPU:
                 print(f"Mem[0x{mem_addr:X}] changed: {val_before} -> {val_after}")
 
     def _set_nz_flags(self, result):
-        # Negative flag: bit31
+        
         self.flags['N'] = (result >> 31) & 1
-        # Zero flag
+        
         self.flags['Z'] = int(result == 0)
 
-    # ---- Execution handlers for each opcode ----
+    # Execution handlers for each opcode
     def exec_add(self, inst):
         """
-        ADD: Rd = Rn + operand2 (+ carry for ADC)
-        Supports both DP_IMM and DP_REG.
+        ADD: Rd = Rn + operand2 (+ carry)
+        Supports both immediate and register.
         """
         op2 = inst.imm if inst.imm is not None else self.regs[inst.rm]
         result = self.regs[inst.rn] + op2
@@ -258,13 +243,12 @@ class CPU:
         if imm24 & (1 << 23):
             imm24 -= (1 << 24)
         offset = imm24 << 2
-        next_pc = self.pc + 8          # pipeline: PC points two instructions ahead
-        self.regs[14] = self.pc + 4    # LR should hold address of instruction after BL
+        next_pc = self.pc + 8          
+        self.regs[14] = self.pc + 4    
         self.pc = next_pc + offset
 
-# -----------------------
 # Unit tests
-# -----------------------
+
 import unittest
 
 class TestCPUExecutor(unittest.TestCase):
@@ -273,7 +257,7 @@ class TestCPUExecutor(unittest.TestCase):
 
     def test_add_imm(self):
         # ADD R2 = R1 + #5
-        inst = DecodedInstruction(0)  # fields will be overwritten
+        inst = DecodedInstruction(0)  
         inst.op_code, inst.op_type, inst.rn, inst.rd, inst.imm = 'ADD', 'DP_IMM', 1, 2, 5
         self.cpu.regs[1] = 10
         self.cpu.execute(inst)
@@ -328,12 +312,10 @@ class TestCPUExecutor(unittest.TestCase):
         inst.op_code, inst.op_type, inst.imm = 'B', 'BRANCH', 2
         self.cpu.regs[15] = 0
         self.cpu.execute(inst)
-       # PC is treated as pointing to the current instruction address, so the
-        # branch target uses PC+8 plus the shifted offset
+       
         self.assertEqual(self.cpu.regs[15], 16)
 
     def test_branch_link(self):
-        # BL with immediate 0 should branch to PC+8 and set LR=PC+4
         inst = DecodedInstruction(0)
         inst.op_code, inst.op_type, inst.imm = 'BL', 'BRANCH', 0
         self.cpu.regs[15] = 0
@@ -342,7 +324,6 @@ class TestCPUExecutor(unittest.TestCase):
         self.assertEqual(self.cpu.regs[14], 4)
 
     def test_bl_negative_offset(self):
-        # BL -1 should branch backwards and set link register correctly
         inst = DecodedInstruction(0)
         inst.op_code, inst.op_type, inst.imm = 'BL', 'BRANCH', 0xFFFFFF
         self.cpu.pc = 0
@@ -350,6 +331,6 @@ class TestCPUExecutor(unittest.TestCase):
         self.assertEqual(self.cpu.pc, 4)
         self.assertEqual(self.cpu.regs[14], 4)
 
-# Run tests if executed as script
+
 if __name__ == '__main__':
     unittest.main()
