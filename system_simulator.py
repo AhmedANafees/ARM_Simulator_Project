@@ -22,20 +22,19 @@ class SystemSimulator:
 
     def run(self):
         print("\n--- Starting Simulation ---\n")
-        while True:
+        self.cpu.pc = 0
+        instruction_count = 0
+        while instruction_count < 100:
             instruction_word = self.fetch()
             if instruction_word is None:
                 print(f"No instruction at address 0x{self.PC:08X}, halting.")
                 break
 
             decoded = decode_arm(instruction_word)
-            print(f"0x{self.PC:08X}: Executing {decoded.opcode}")
+            print(f"0x{self.cpu.pc:08X}: Executing {decoded.op_code}")
 
             self.cpu.execute(decoded)
-            self.PC += 4  
-            if decoded.opcode in ["BX"] and decoded.rd == 15:
-                print("Encountered BX LR/PC, halting.")
-                break
+            instruction_count += 1
 
         print("\n--- Simulation Complete ---\n")
         self.cpu.print_state() 
