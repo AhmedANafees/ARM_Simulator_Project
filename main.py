@@ -9,6 +9,7 @@ def load_binary(path, mem_hier):
         data = f.read()
     for addr in range(0, len(data), 4):
         mem_hier.main_mem.memory[addr:addr+4] = data[addr:addr+4]
+    return len(data)              # return program size
 
 
 def main():
@@ -40,16 +41,13 @@ def main():
         main_memory_size=64 * 1024
     )
 
-    load_binary(args.binary, mh)
+    program_size = load_binary(args.binary, mh)
 
     cpu = CPU(mem_hier=mh)
     cpu.pc = 0
 
-    while True:
-        try:
-            instr_word = mh.read_instruction(cpu.pc)
-        except IndexError:
-            break
+    while cpu.pc < program_size:
+        instr_word = mh.read_instruction(cpu.pc)
 
         inst = decode_thumb(instr_word) if cpu.cpu_is_thumb else decode_arm(instr_word)
         cpu.execute(inst)
