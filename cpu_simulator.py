@@ -271,7 +271,7 @@ class CPU:
         self.regs[inst.rd] = result & 0xFFFFFFFF
         self._set_nz_flags(result)
 
-   def exec_ldr(self, inst):
+    def exec_ldr(self, inst):
         addr = self.regs[inst.rn] + inst.imm
         if self.mem_hier:
             self.regs[inst.rd] = self.mem_hier.read_data(addr)

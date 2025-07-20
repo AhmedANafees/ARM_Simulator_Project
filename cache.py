@@ -56,7 +56,7 @@ class Cache:
             tag = address >> self.offset_bits
         return tag, index, offset
 
-    def read(self, address):
+    def read(self, address, size=4):
         tag, index, offset = self._get_address_parts(address)
         line_index, line = self._find_line(tag, index)
         if line and line.valid and line.tag == tag:
@@ -65,7 +65,7 @@ class Cache:
         else:
             self.misses += 1
             line_index = self._handle_miss(address, tag, index)
-        return self.lines[line_index].data[offset : offset + 4]
+        return self.lines[line_index].data[offset : offset + size]
 
     def write(self, address, data_word):
         tag, index, offset = self._get_address_parts(address)
