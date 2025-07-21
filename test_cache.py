@@ -53,7 +53,7 @@ class TestCache(unittest.TestCase):
         data = self.direct_cache.read(address)
         self.assertEqual(self.direct_cache.misses, 1, "Should be 1 miss")
         self.assertEqual(self.direct_cache.hits, 0, "Should be 0 hits")
-        # FIX: Cast the returned bytearray to bytes for a consistent comparison
+        
         self.assertEqual(bytes(data), b'\xDE\xAD\xBE\xEF')
         print(f"-> Miss confirmed. Fetched data: {data.hex().upper()}")
         self.print_cache_state(self.direct_cache)
@@ -62,7 +62,7 @@ class TestCache(unittest.TestCase):
         data2 = self.direct_cache.read(address)
         self.assertEqual(self.direct_cache.misses, 1, "Miss count should not change")
         self.assertEqual(self.direct_cache.hits, 1, "Should be 1 hit")
-        # FIX: Cast the returned bytearray to bytes for a consistent comparison
+
         self.assertEqual(bytes(data2), b'\xDE\xAD\xBE\xEF')
         print(f"-> Hit confirmed. Read data: {data2.hex().upper()}")
         self.print_cache_state(self.direct_cache)
@@ -88,7 +88,7 @@ class TestCache(unittest.TestCase):
         print("-> Eviction and write-back confirmed.")
         self.print_cache_state(self.direct_cache)
 
-        # FIX: Cast the returned bytearray to bytes for a consistent comparison
+
         self.assertEqual(bytes(self.memory.read(addr1, 4)), b'\x12\x34\x56\x78')
         print("-> Verified data was correctly written back to mock memory.")
 
